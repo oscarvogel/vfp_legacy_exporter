@@ -1,0 +1,66 @@
+# Generated exports
+# Keep the folder itself through exported/.gitkeep, but never commit generated client exports.
+exported/*
+!exported/.gitkeep
+
+# Local export folders / workspaces
+_exports/
+exports/
+local_exports/
+vfp_exports/
+*_exported/
+*_EXPORTADO/
+*_exportado/
+
+# Visual FoxPro data and index files
+# These are often real application data and should not be committed here.
+*.dbf
+*.fpt
+*.cdx
+*.idx
+*.dbc
+*.dct
+*.dcx
+
+# Visual FoxPro compiled / generated / temporary files
+*.fxp
+*.app
+*.exe
+*.bak
+*.tbk
+*.tmp
+*.err
+*.log
+*.mem
+*.qpr
+*.mpr
+*.mpx
+*.pjx
+*.pjt
+
+# Legacy UI/source containers are ignored by default to avoid leaking real systems.
+# Sanitized samples can be force-added intentionally with: git add -f samples/path/file.scx
+*.scx
+*.sct
+*.vcx
+*.vct
+*.frx
+*.frt
+*.mnx
+*.mnt
+*.lbx
+*.lbt
+
+# Python / tooling artifacts for helper scripts that may be added later
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
