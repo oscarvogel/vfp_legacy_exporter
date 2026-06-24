@@ -233,14 +233,18 @@ PROCEDURE ExportCurrentRecordFields
     FOR i = 1 TO tnFields
         lcField = LOWER(taFields[i, 1])
 
-        TRY
-            luValue = EVALUATE(lcField)
-            lcType = VARTYPE(luValue)
-            lcTextValue = ValueToText(luValue, lcType)
-        CATCH TO loEx
-            lcType = "U"
-            lcTextValue = "[UNREADABLE FIELD: " + loEx.Message + "]"
-        ENDTRY
+        IF FieldShouldOmitContent(lcField)
+            lcTextValue = "[OMITIDO: campo binario, compilado o no util para analisis]"
+        ELSE
+            TRY
+                luValue = EVALUATE(lcField)
+                lcType = VARTYPE(luValue)
+                lcTextValue = ValueToText(luValue, lcType)
+            CATCH TO loEx
+                lcType = "U"
+                lcTextValue = "[UNREADABLE FIELD: " + loEx.Message + "]"
+            ENDTRY
+        ENDIF
 
         tcJson = tcJson + "," + CRLF()
         tcJson = tcJson + "      " + JsonValue(lcField) + ": " + JsonValue(lcTextValue)
@@ -362,6 +366,16 @@ FUNCTION IsSameOrChildPath
     lcParent = UPPER(FULLPATH(ADDBS(tcParent)))
 
     RETURN LEFT(lcCandidate, LEN(lcParent)) == lcParent
+ENDFUNC
+
+
+FUNCTION FieldShouldOmitContent
+    LPARAMETERS tcFieldName
+
+    LOCAL lcFieldName
+    lcFieldName = LOWER(ALLTRIM(tcFieldName))
+
+    RETURN INLIST(lcFieldName, "objcode", "ole", "ole2", "picture", "icon")
 ENDFUNC
 
 
