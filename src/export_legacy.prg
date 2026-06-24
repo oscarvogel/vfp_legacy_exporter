@@ -206,7 +206,7 @@ PROCEDURE ExportDbfBasedFile
         lcMd = lcMd + "## Registro " + TRANSFORM(RECNO()) + CRLF() + CRLF()
         lcTxt = lcTxt + "REGISTRO: " + TRANSFORM(RECNO()) + CRLF()
 
-        DO ExportCurrentRecordFields WITH lcAlias, @laFields, lnFields, @lcJson, @lcMd, @lcTxt
+        DO ExportCurrentRecordFields WITH lcAlias, laFields, lnFields, lcJson, lcMd, lcTxt
 
         lcJson = lcJson + CRLF() + "    }"
         lcMd = lcMd + CRLF() + "---" + CRLF() + CRLF()
