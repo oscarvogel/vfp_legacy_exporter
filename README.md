@@ -26,21 +26,39 @@ Muchos sistemas Visual FoxPro productivos tienen lógica de negocio dentro de fo
 
 ## Uso MVP
 
-Ejecutar desde Visual FoxPro 9 sobre una copia del sistema legacy:
+Ejecutar desde Visual FoxPro 9 sobre una copia del sistema legacy.
+
+### Exportar una carpeta completa
 
 ```foxpro
-DO C:\vfp_legacy_exporter\src\export_legacy.prg WITH ;
-   "C:\COPIA_SISTEMA_VFP", ;
-   "D:\VFP_EXPORTS\COPIA_SISTEMA_VFP"
+DO src\export_legacy.prg WITH ;
+   "ruta\a\copia_sistema", ;
+   "ruta\a\salida_exportada"
+```
+
+### Exportar un archivo puntual
+
+Sirve para probar un formulario, clase, reporte, menú o PRG específico sin exportar todo el sistema.
+
+```foxpro
+DO src\export_legacy.prg WITH ;
+   "ruta\a\copia_sistema\forms\pedido.scx", ;
+   "ruta\a\salida_pedido"
+```
+
+Extensiones soportadas para archivo puntual:
+
+```text
+.scx .vcx .frx .mnx .prg .h .ini .txt
 ```
 
 La carpeta destino queda con esta estructura:
 
 ```text
-D:\VFP_EXPORTS\COPIA_SISTEMA_VFP\
-├─ json\
-├─ md\
-├─ txt\
+salida_exportada/
+├─ json/
+├─ md/
+├─ txt/
 └─ export_errors.log
 ```
 
