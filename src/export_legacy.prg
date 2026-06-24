@@ -8,7 +8,7 @@
 * - No modificar nunca los archivos originales.
 *
 * Uso desde Visual FoxPro:
-* DO src\export_legacy.prg WITH "C:\COPIA_SISTEMA_VFP", "C:\COPIA_SISTEMA_VFP_EXPORTADO"
+* DO src\export_legacy.prg WITH "C:\COPIA_SISTEMA_VFP", "D:\VFP_EXPORTS\COPIA_SISTEMA_VFP"
 
 LPARAMETERS tcSourceRoot, tcOutputRoot
 
@@ -26,8 +26,13 @@ ENDIF
 
 tcSourceRoot = FULLPATH(ADDBS(tcSourceRoot))
 
+IF NOT DIRECTORY(tcSourceRoot)
+    ? "No existe la carpeta origen: " + tcSourceRoot
+    RETURN .F.
+ENDIF
+
 IF EMPTY(tcOutputRoot)
-    tcOutputRoot = ADDBS(tcSourceRoot) + "_exported"
+    tcOutputRoot = tcSourceRoot + "_exported"
 ENDIF
 
 tcOutputRoot = FULLPATH(ADDBS(tcOutputRoot))
@@ -57,23 +62,21 @@ RETURN .T.
 PROCEDURE ExportFolder
     LPARAMETERS tcFolder, tcSourceRoot, tcOutputRoot
 
-    LOCAL laItems[1], lnItems, i
-    LOCAL lcName, lcFullPath, lcExt, lcAttr
+    LOCAL laFiles[1], laDirs[1]
+    LOCAL lnFiles, lnDirs, i
+    LOCAL lcName, lcFullPath, lcExt
 
-    lnItems = ADIR(laItems, ADDBS(tcFolder) + "*.*", "D")
+    IF IsSameOrChildPath(tcFolder, tcOutputRoot)
+        RETURN
+    ENDIF
 
-    FOR i = 1 TO lnItems
-        lcName = laItems[i, 1]
-        lcAttr = laItems[i, 5]
+    lnFiles = ADIR(laFiles, ADDBS(tcFolder) + "*.*")
 
-        IF lcName == "." OR lcName == ".."
-            LOOP
-        ENDIF
-
+    FOR i = 1 TO lnFiles
+        lcName = laFiles[i, 1]
         lcFullPath = ADDBS(tcFolder) + lcName
 
-        IF "D" $ lcAttr
-            DO ExportFolder WITH lcFullPath, tcSourceRoot, tcOutputRoot
+        IF DIRECTORY(lcFullPath)
             LOOP
         ENDIF
 
@@ -86,6 +89,22 @@ PROCEDURE ExportFolder
         CASE INLIST(lcExt, "prg", "h", "ini", "txt")
             DO ExportTextFile WITH lcFullPath, tcSourceRoot, tcOutputRoot
         ENDCASE
+    ENDFOR
+
+    lnDirs = ADIR(laDirs, ADDBS(tcFolder) + "*.*", "D")
+
+    FOR i = 1 TO lnDirs
+        lcName = laDirs[i, 1]
+
+        IF lcName == "." OR lcName == ".."
+            LOOP
+        ENDIF
+
+        lcFullPath = ADDBS(tcFolder) + lcName
+
+        IF DIRECTORY(lcFullPath)
+            DO ExportFolder WITH lcFullPath, tcSourceRoot, tcOutputRoot
+        ENDIF
     ENDFOR
 ENDPROC
 
@@ -296,6 +315,17 @@ FUNCTION SafeOutputName
     lcName = STRTRAN(lcName, ":", "_")
     lcName = STRTRAN(lcName, " ", "_")
     RETURN lcName
+ENDFUNC
+
+
+FUNCTION IsSameOrChildPath
+    LPARAMETERS tcCandidate, tcParent
+
+    LOCAL lcCandidate, lcParent
+    lcCandidate = UPPER(FULLPATH(ADDBS(tcCandidate)))
+    lcParent = UPPER(FULLPATH(ADDBS(tcParent)))
+
+    RETURN LEFT(lcCandidate, LEN(lcParent)) == lcParent
 ENDFUNC
 
 
