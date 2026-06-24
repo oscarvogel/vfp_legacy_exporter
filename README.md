@@ -62,6 +62,29 @@ salida_exportada/
 └─ export_errors.log
 ```
 
+### Generar índices
+
+Una vez generada la exportación, se puede crear una vista resumida del sistema:
+
+```foxpro
+DO src\generate_indexes.prg WITH "ruta\a\salida_exportada"
+```
+
+Esto crea:
+
+```text
+salida_exportada/
+└─ index/
+   ├─ INDICE_GENERAL.md
+   ├─ INDICE_FORMULARIOS.md
+   ├─ INDICE_CLASES.md
+   ├─ INDICE_REPORTES.md
+   ├─ INDICE_MENUS.md
+   └─ INDICE_PROGRAMAS.md
+```
+
+Los índices se generan a partir de los Markdown exportados y ayudan a ubicar rápidamente formularios, clases, métodos, objetos y clases base.
+
 Notas:
 
 - La carpeta destino puede estar fuera del proyecto VFP y es lo recomendado.
@@ -80,6 +103,8 @@ Exportador seguro
    ↓
 TXT / MD / JSON
    ↓
+Índices Markdown
+   ↓
 Análisis con Codex/IA
    ↓
 Propuesta de cambio mínimo
@@ -94,7 +119,8 @@ Validación en Visual FoxPro
 ```text
 vfp_legacy_exporter/
 ├─ src/
-│  └─ export_legacy.prg
+│  ├─ export_legacy.prg
+│  └─ generate_indexes.prg
 ├─ docs/
 │  ├─ ROADMAP.md
 │  ├─ FORMATO_EXPORTACION.md
@@ -111,4 +137,4 @@ vfp_legacy_exporter/
 
 ## Estado
 
-MVP inicial en desarrollo. El primer hito es crear un exportador que pueda ejecutarse desde Visual FoxPro sobre una copia de un sistema legacy.
+MVP inicial disponible. El exportador permite generar Markdown/JSON/TXT desde archivos o carpetas VFP legacy, y el generador de índices permite crear una vista resumida del sistema exportado.
