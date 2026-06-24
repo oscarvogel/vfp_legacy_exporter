@@ -24,6 +24,33 @@ Muchos sistemas Visual FoxPro productivos tienen lógica de negocio dentro de fo
 - Copiar `.prg`, `.h`, `.ini` y archivos de texto relevantes.
 - Generar índices y documentación básica del sistema exportado.
 
+## Uso MVP
+
+Ejecutar desde Visual FoxPro 9 sobre una copia del sistema legacy:
+
+```foxpro
+DO C:\vfp_legacy_exporter\src\export_legacy.prg WITH ;
+   "C:\COPIA_SISTEMA_VFP", ;
+   "D:\VFP_EXPORTS\COPIA_SISTEMA_VFP"
+```
+
+La carpeta destino queda con esta estructura:
+
+```text
+D:\VFP_EXPORTS\COPIA_SISTEMA_VFP\
+├─ json\
+├─ md\
+├─ txt\
+└─ export_errors.log
+```
+
+Notas:
+
+- La carpeta destino puede estar fuera del proyecto VFP y es lo recomendado.
+- Si la carpeta destino queda dentro del origen, el exportador la omite para evitar recursión.
+- Las exportaciones reales no deben subirse a este repositorio público.
+- Los archivos `.sct`, `.vct`, `.frt` y `.mnt` se leen indirectamente cuando Visual FoxPro abre su contenedor principal `.scx`, `.vcx`, `.frx` o `.mnx`.
+
 ## Flujo recomendado
 
 ```text
@@ -66,4 +93,4 @@ vfp_legacy_exporter/
 
 ## Estado
 
-Proyecto inicial. El primer hito es crear un exportador MVP que pueda ejecutarse desde Visual FoxPro sobre una copia de un sistema legacy.
+MVP inicial en desarrollo. El primer hito es crear un exportador que pueda ejecutarse desde Visual FoxPro sobre una copia de un sistema legacy.
