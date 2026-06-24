@@ -1,0 +1,69 @@
+# vfp_legacy_exporter
+
+Herramienta para exportar proyectos legacy de Visual FoxPro a formatos legibles por humanos e IA/Codex, sin modificar los archivos originales.
+
+## Objetivo
+
+Muchos sistemas Visual FoxPro productivos tienen lógica de negocio dentro de formularios, clases, reportes y menús. Archivos como `.scx`, `.vcx`, `.frx` y `.mnx` son tablas FoxPro con campos de definición visual, propiedades y métodos. Este proyecto busca extraer esa información a formatos seguros y analizables.
+
+## Principios
+
+- No modificar archivos originales del sistema VFP.
+- Trabajar siempre sobre una copia del proyecto legacy.
+- Exportar a formatos legibles: TXT, Markdown y JSON.
+- Facilitar análisis con Codex/IA sin depender del diseñador visual de VFP.
+- Priorizar cambios mínimos, trazables y seguros.
+- Servir para varios proyectos VFP, no para un único sistema.
+
+## Alcance inicial
+
+- Exportar `.scx/.sct` formularios.
+- Exportar `.vcx/.vct` clases.
+- Exportar `.frx/.frt` reportes.
+- Exportar `.mnx/.mnt` menús.
+- Copiar `.prg`, `.h`, `.ini` y archivos de texto relevantes.
+- Generar índices y documentación básica del sistema exportado.
+
+## Flujo recomendado
+
+```text
+Sistema VFP original
+   ↓
+Copia de trabajo
+   ↓
+Exportador seguro
+   ↓
+TXT / MD / JSON
+   ↓
+Análisis con Codex/IA
+   ↓
+Propuesta de cambio mínimo
+   ↓
+Aplicación manual o script VFP controlado
+   ↓
+Validación en Visual FoxPro
+```
+
+## Estructura esperada
+
+```text
+vfp_legacy_exporter/
+├─ src/
+│  └─ export_legacy.prg
+├─ docs/
+│  ├─ ROADMAP.md
+│  ├─ FORMATO_EXPORTACION.md
+│  ├─ CHECKLIST_CAMBIO_VFP.md
+│  └─ PROMPTS_CODEX_VFP.md
+├─ samples/
+│  └─ README.md
+├─ exported/
+│  └─ .gitkeep
+├─ AGENTS.md
+├─ VALIDATION.md
+└─ PR_CHECKLIST.md
+```
+
+## Estado
+
+Proyecto inicial. El primer hito es crear un exportador MVP que pueda ejecutarse desde Visual FoxPro sobre una copia de un sistema legacy.
