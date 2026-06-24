@@ -7,10 +7,13 @@
 * - Copiar archivos de texto como PRG, H, INI y TXT.
 * - No modificar nunca los archivos originales.
 *
-* Uso desde Visual FoxPro:
+* Uso carpeta completa:
 * DO src\export_legacy.prg WITH "C:\COPIA_SISTEMA_VFP", "D:\VFP_EXPORTS\COPIA_SISTEMA_VFP"
+*
+* Uso archivo puntual:
+* DO src\export_legacy.prg WITH "C:\COPIA_SISTEMA_VFP\forms\pedido.scx", "D:\VFP_EXPORTS\pedido"
 
-LPARAMETERS tcSourceRoot, tcOutputRoot
+LPARAMETERS tcSourcePath, tcOutputRoot
 
 SET SAFETY OFF
 SET TALK OFF
@@ -19,20 +22,37 @@ SET DELETED OFF
 
 PRIVATE pcLogFile
 
-IF EMPTY(tcSourceRoot)
-    ? "Debe indicar carpeta origen."
+LOCAL llSourceIsFolder, llSourceIsFile
+LOCAL lcSourceFile, lcSourceRoot
+
+IF EMPTY(tcSourcePath)
+    ? "Debe indicar carpeta o archivo origen."
     RETURN .F.
 ENDIF
 
-tcSourceRoot = FULLPATH(ADDBS(tcSourceRoot))
+tcSourcePath = FULLPATH(tcSourcePath)
+llSourceIsFolder = DIRECTORY(tcSourcePath)
+llSourceIsFile = FILE(tcSourcePath)
 
-IF NOT DIRECTORY(tcSourceRoot)
-    ? "No existe la carpeta origen: " + tcSourceRoot
+IF NOT llSourceIsFolder AND NOT llSourceIsFile
+    ? "No existe el origen indicado: " + tcSourcePath
     RETURN .F.
 ENDIF
 
-IF EMPTY(tcOutputRoot)
-    tcOutputRoot = tcSourceRoot + "_exported"
+IF llSourceIsFolder
+    lcSourceRoot = FULLPATH(ADDBS(tcSourcePath))
+    lcSourceFile = ""
+
+    IF EMPTY(tcOutputRoot)
+        tcOutputRoot = lcSourceRoot + "_exported"
+    ENDIF
+ELSE
+    lcSourceFile = FULLPATH(tcSourcePath)
+    lcSourceRoot = FULLPATH(ADDBS(JUSTPATH(lcSourceFile)))
+
+    IF EMPTY(tcOutputRoot)
+        tcOutputRoot = lcSourceRoot + JUSTSTEM(lcSourceFile) + "_exported"
+    ENDIF
 ENDIF
 
 tcOutputRoot = FULLPATH(ADDBS(tcOutputRoot))
@@ -44,14 +64,19 @@ DO EnsureDir WITH tcOutputRoot + "md"
 DO EnsureDir WITH tcOutputRoot + "txt"
 
 STRTOFILE("VFP legacy export log" + CRLF(), pcLogFile)
-STRTOFILE("Source: " + tcSourceRoot + CRLF(), pcLogFile, 1)
+STRTOFILE("Source: " + tcSourcePath + CRLF(), pcLogFile, 1)
+STRTOFILE("Source root: " + lcSourceRoot + CRLF(), pcLogFile, 1)
 STRTOFILE("Output: " + tcOutputRoot + CRLF() + CRLF(), pcLogFile, 1)
 
 ? "Exportando proyecto VFP legacy..."
-? "Origen : " + tcSourceRoot
+? "Origen : " + tcSourcePath
 ? "Destino: " + tcOutputRoot
 
-DO ExportFolder WITH tcSourceRoot, tcSourceRoot, tcOutputRoot
+IF llSourceIsFolder
+    DO ExportFolder WITH lcSourceRoot, lcSourceRoot, tcOutputRoot
+ELSE
+    DO ExportSingleFile WITH lcSourceFile, lcSourceRoot, tcOutputRoot
+ENDIF
 
 ? "Exportacion finalizada."
 ? "Log: " + pcLogFile
@@ -64,7 +89,7 @@ PROCEDURE ExportFolder
 
     LOCAL laFiles[1], laDirs[1]
     LOCAL lnFiles, lnDirs, i
-    LOCAL lcName, lcFullPath, lcExt
+    LOCAL lcName, lcFullPath
 
     IF IsSameOrChildPath(tcFolder, tcOutputRoot)
         RETURN
@@ -80,15 +105,7 @@ PROCEDURE ExportFolder
             LOOP
         ENDIF
 
-        lcExt = LOWER(JUSTEXT(lcName))
-
-        DO CASE
-        CASE INLIST(lcExt, "scx", "vcx", "frx", "mnx")
-            DO ExportDbfBasedFile WITH lcFullPath, tcSourceRoot, tcOutputRoot
-
-        CASE INLIST(lcExt, "prg", "h", "ini", "txt")
-            DO ExportTextFile WITH lcFullPath, tcSourceRoot, tcOutputRoot
-        ENDCASE
+        DO ExportSingleFile WITH lcFullPath, tcSourceRoot, tcOutputRoot
     ENDFOR
 
     lnDirs = ADIR(laDirs, ADDBS(tcFolder) + "*.*", "D")
@@ -106,6 +123,25 @@ PROCEDURE ExportFolder
             DO ExportFolder WITH lcFullPath, tcSourceRoot, tcOutputRoot
         ENDIF
     ENDFOR
+ENDPROC
+
+
+PROCEDURE ExportSingleFile
+    LPARAMETERS tcFile, tcSourceRoot, tcOutputRoot
+
+    LOCAL lcExt
+    lcExt = LOWER(JUSTEXT(tcFile))
+
+    DO CASE
+    CASE INLIST(lcExt, "scx", "vcx", "frx", "mnx")
+        DO ExportDbfBasedFile WITH tcFile, tcSourceRoot, tcOutputRoot
+
+    CASE INLIST(lcExt, "prg", "h", "ini", "txt")
+        DO ExportTextFile WITH tcFile, tcSourceRoot, tcOutputRoot
+
+    OTHERWISE
+        DO LogError WITH "Archivo omitido por extension no soportada: " + tcFile
+    ENDCASE
 ENDPROC
 
 
