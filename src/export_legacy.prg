@@ -234,17 +234,17 @@ PROCEDURE ExportCurrentRecordFields
         lcField = LOWER(taFields[i, 1])
 
         IF FieldShouldOmitContent(lcField)
-            lcTextValue = "[OMITIDO: campo binario, compilado o no util para analisis]"
-        ELSE
-            TRY
-                luValue = EVALUATE(lcField)
-                lcType = VARTYPE(luValue)
-                lcTextValue = ValueToText(luValue, lcType)
-            CATCH TO loEx
-                lcType = "U"
-                lcTextValue = "[UNREADABLE FIELD: " + loEx.Message + "]"
-            ENDTRY
+            LOOP
         ENDIF
+
+        TRY
+            luValue = EVALUATE(lcField)
+            lcType = VARTYPE(luValue)
+            lcTextValue = ValueToText(luValue, lcType)
+        CATCH TO loEx
+            lcType = "U"
+            lcTextValue = "[UNREADABLE FIELD: " + loEx.Message + "]"
+        ENDTRY
 
         tcJson = tcJson + "," + CRLF()
         tcJson = tcJson + "      " + JsonValue(lcField) + ": " + JsonValue(lcTextValue)
