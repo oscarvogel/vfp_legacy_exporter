@@ -721,12 +721,7 @@ ENDPROC
 
 
 FUNCTION SafeTimestamp
-    LOCAL lcStamp
-
-    lcStamp = DTOS(DATE()) + "_" + STRTRAN(TIME(), ":", "")
-    lcStamp = STRTRAN(lcStamp, " ", "0")
-
-    RETURN lcStamp
+    RETURN SYS(2015)
 ENDFUNC
 
 

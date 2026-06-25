@@ -59,8 +59,10 @@ Assert-Contains $script "JUSTSTEM\(tcScxFile\)\s*\+\s*['""]\.SCT['""]" "SCT pair
 Assert-Contains $script "BackupScxPair" "optional backup helper"
 Assert-Contains $script "llCreateBackup" "backup is explicit, not default"
 Assert-Contains $script "COPY FILE" "optional file backup copy"
-Assert-Contains $script "DTOS\(DATE\(\)\)\s*\+\s*`"_`"\s*\+\s*STRTRAN\(TIME\(\),\s*`":`",\s*`"`"\)" "legacy-compatible timestamp"
+Assert-Contains $script "FUNCTION\s+SafeTimestamp[\s\S]*RETURN\s+SYS\(2015\)[\s\S]*ENDFUNC" "max-compatible SYS(2015) timestamp"
 Assert-NotContains $script "TTOC\s*\(" "SafeTimestamp must not use TTOC"
+Assert-NotContains $script "DTOS\s*\(" "SafeTimestamp must not use DTOS"
+Assert-NotContains $script "TIME\s*\(" "SafeTimestamp must not use TIME"
 Assert-Contains $script "USE\s+\(tcScxFile\).*SHARED.*NOUPDATE" "SCX opened as read-only table, not raw text"
 Assert-Contains $script "sidecar-only" "default sidecar-only mode"
 Assert-Contains $script "GenerateIngresoComprobantesSidecars" "sidecar generator"
@@ -115,6 +117,13 @@ Assert-Contains $script "propiedades manuales" "summary includes manual properti
 Assert-Contains $script "reserved3 manual" "summary includes manual reserved3"
 Assert-Contains $script "metodos manuales" "summary includes manual methods"
 Assert-Contains $script "Aceptar1\.Click manual" "summary includes manual Aceptar1 status"
+
+$beforeBackupFlag = $script.Substring(0, $script.IndexOf("IF llCreateBackup"))
+Assert-NotContains $beforeBackupFlag "BackupScxPair" "default sidecar-only path does not call backup helper"
+Assert-NotContains $beforeBackupFlag "SafeTimestamp" "default sidecar-only path does not call timestamp"
+Assert-NotContains $beforeBackupFlag "_scx_backups" "default sidecar-only path does not create backup folder"
+Assert-Contains $script "IF llCreateBackup[\s\S]*DO BackupScxPair WITH" "backup helper only called behind BACKUP flag"
+Assert-Contains $script "BackupScxPair[\s\S]*_scx_backups" "BACKUP path creates _scx_backups folder"
 
 Assert-Contains $doc "DO src\\apply_scx_changes\.prg WITH" "VFP execution example"
 Assert-Contains $doc "work\\fasa_sandbox\\forms\\INGRESO COMPROBANTES\.SCX" "structured sandbox execution path"
