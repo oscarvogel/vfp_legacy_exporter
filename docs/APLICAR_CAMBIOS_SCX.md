@@ -22,13 +22,66 @@ PREPARE_INGRESO_COMPROBANTES
 
 Este modo esta acotado al primer loop del caso `INGRESO COMPROBANTES`.
 
+## Preparar sandbox compatible con classloc
+
+El formulario `INGRESO COMPROBANTES.SCX` usa `classloc` relativos como `..\libs\generales.vcx`. Por eso no alcanza con copiar el `.SCX/.SCT` a una carpeta plana: Visual FoxPro necesita que el sandbox respete la estructura relativa.
+
+Sandbox recomendado:
+
+```text
+X:\vfp_legacy_exporter\work\fasa_sandbox\
+├─ forms\
+│  ├─ INGRESO COMPROBANTES.SCX
+│  └─ INGRESO COMPROBANTES.SCT
+├─ libs\
+│  ├─ generales.vcx
+│  ├─ generales.vct
+│  ├─ coleccion.vcx
+│  ├─ coleccion.vct
+│  ├─ botones.vcx
+│  ├─ botones.vct
+│  ├─ fasa.vcx
+│  ├─ fasa.vct
+│  ├─ lookup.vcx
+│  ├─ lookup.vct
+│  ├─ validaciones.vcx
+│  └─ validaciones.vct
+├─ include\
+│  ├─ def.h
+│  └─ tastrade.h
+└─ graphics\
+```
+
+Preparacion manual minima:
+
+1. Crear `work\fasa_sandbox\forms`.
+2. Crear `work\fasa_sandbox\libs`.
+3. Crear `work\fasa_sandbox\include`.
+4. Crear `work\fasa_sandbox\graphics`.
+5. Copiar `INGRESO COMPROBANTES.SCX` y `INGRESO COMPROBANTES.SCT` a `forms`.
+6. Copiar las librerias `.VCX/.VCT` requeridas a `libs`.
+7. Copiar los `.H` requeridos a `include`.
+8. Copiar a `graphics` solo archivos necesarios si `MODIFY FORM` reporta iconos o imagenes faltantes. La iconografia puede faltar sin invalidar el objetivo principal si las clases resuelven.
+
+Helper PowerShell opcional:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\prepare_fasa_sandbox.ps1
+```
+
+El helper copia solo la lista minima documentada desde `X:\FASA` hacia `work\fasa_sandbox`. No borra el sandbox y no sobreescribe archivos existentes salvo que se use `-Force`.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\prepare_fasa_sandbox.ps1 -Force
+```
+
 ## Ejecutar desde Visual FoxPro
 
 Desde Visual FoxPro 9, parado en la raiz del repo:
 
 ```foxpro
 DO src\apply_scx_changes.prg WITH ;
-   "X:\vfp_legacy_exporter\work\fasa_ingreso_comprobantes_precarga\INGRESO COMPROBANTES.SCX", ;
+   "X:\vfp_legacy_exporter\work\fasa_sandbox\forms\INGRESO COMPROBANTES.SCX", ;
    "PREPARE_INGRESO_COMPROBANTES"
 ```
 
@@ -54,7 +107,7 @@ El aplicador no crea botones visuales ni modifica layout. Para este loop, agrega
 Despues de ejecutar el aplicador:
 
 ```foxpro
-MODIFY FORM "X:\vfp_legacy_exporter\work\fasa_ingreso_comprobantes_precarga\INGRESO COMPROBANTES.SCX"
+MODIFY FORM "X:\vfp_legacy_exporter\work\fasa_sandbox\forms\INGRESO COMPROBANTES.SCX"
 ```
 
 Pasos manuales:
@@ -78,7 +131,8 @@ Restaurar siempre el par completo `.SCX/.SCT`.
 
 ## Checklist de prueba
 
-- [ ] Ejecutar solamente contra `X:\vfp_legacy_exporter\work\fasa_ingreso_comprobantes_precarga\INGRESO COMPROBANTES.SCX`.
+- [ ] Preparar `X:\vfp_legacy_exporter\work\fasa_sandbox` con `forms`, `libs`, `include` y `graphics`.
+- [ ] Ejecutar solamente contra `X:\vfp_legacy_exporter\work\fasa_sandbox\forms\INGRESO COMPROBANTES.SCX`.
 - [ ] Confirmar que no se modifico `X:\FASA\FORMS\INGRESO COMPROBANTES.SCX`.
 - [ ] Confirmar que se creo backup de `.SCX` y `.SCT`.
 - [ ] Confirmar que el aplicador no duplica el metodo si se ejecuta dos veces.

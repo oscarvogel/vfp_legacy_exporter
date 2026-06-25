@@ -3,7 +3,7 @@
 *
 * Uso recomendado sobre sandbox:
 * DO src\apply_scx_changes.prg WITH ;
-*    "X:\vfp_legacy_exporter\work\fasa_ingreso_comprobantes_precarga\INGRESO COMPROBANTES.SCX", ;
+*    "X:\vfp_legacy_exporter\work\fasa_sandbox\forms\INGRESO COMPROBANTES.SCX", ;
 *    "PREPARE_INGRESO_COMPROBANTES"
 *
 * Este script no parchea SCX/SCT como texto bruto. Abre el SCX como tabla VFP,
