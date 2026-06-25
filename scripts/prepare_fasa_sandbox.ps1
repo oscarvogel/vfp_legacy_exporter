@@ -1,11 +1,22 @@
 [CmdletBinding()]
 param(
     [string]$SourceRoot = "X:\FASA",
-    [string]$SandboxRoot = (Join-Path (Split-Path -Parent $PSScriptRoot) "work\fasa_sandbox"),
+    [string]$SandboxRoot = "",
     [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
+
+$scriptRoot = $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($scriptRoot)) {
+    $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+}
+
+$repoRoot = Split-Path -Parent $scriptRoot
+
+if ([string]::IsNullOrWhiteSpace($SandboxRoot)) {
+    $SandboxRoot = Join-Path $repoRoot "work\fasa_sandbox"
+}
 
 $requiredFiles = @(
     "forms\INGRESO COMPROBANTES.SCX",
@@ -93,8 +104,6 @@ $missing = @($results | Where-Object { $_.Status -eq "missing" })
 $copied = @($results | Where-Object { $_.Status -eq "copied" })
 $existing = @($results | Where-Object { $_.Status -eq "exists" })
 $sandboxScx = Join-Path $SandboxRoot "forms\INGRESO COMPROBANTES.SCX"
-$repoRoot = Split-Path -Parent $PSScriptRoot
-
 $summary = [pscustomobject]@{
     SandboxRoot = $SandboxRoot
     Copied = @($copied | ForEach-Object { $_.RelativePath })

@@ -723,10 +723,8 @@ ENDPROC
 FUNCTION SafeTimestamp
     LOCAL lcStamp
 
-    lcStamp = TTOC(DATETIME(), 1)
-    lcStamp = STRTRAN(lcStamp, "-", "")
-    lcStamp = STRTRAN(lcStamp, ":", "")
-    lcStamp = STRTRAN(lcStamp, "T", "_")
+    lcStamp = DTOS(DATE()) + "_" + STRTRAN(TIME(), ":", "")
+    lcStamp = STRTRAN(lcStamp, " ", "0")
 
     RETURN lcStamp
 ENDFUNC
