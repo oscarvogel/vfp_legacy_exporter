@@ -154,7 +154,7 @@ ENDPROC
 FUNCTION ExtractTitle
     LPARAMETERS tcContent
 
-    LOCAL lnStart, lnEnd
+    LOCAL lnEnd
 
     IF LEFT(tcContent, 2) == "# "
         lnEnd = AT(CHR(13), tcContent)
@@ -218,11 +218,12 @@ ENDFUNC
 FUNCTION ExtractUniqueValues
     LPARAMETERS tcContent, tcFieldName, tnLimit
 
-    LOCAL lcNeedle, lnPos, lnSearchFrom, lcValue, lcResult, lnCount
+    LOCAL lcNeedle, lnPos, lnSearchFrom, lcValue, lcResult, lcSeen, lnCount
 
     lcNeedle = "### " + LOWER(tcFieldName)
     lnSearchFrom = 1
     lcResult = ""
+    lcSeen = "|"
     lnCount = 0
 
     DO WHILE .T.
@@ -235,8 +236,9 @@ FUNCTION ExtractUniqueValues
         lcValue = ExtractCodeBlockAfter(tcContent, lnPos)
         lcValue = FirstNonEmptyLine(lcValue)
 
-        IF NOT EMPTY(lcValue) AND NOT ValueAlreadyListed(lcResult, lcValue)
+        IF NOT EMPTY(lcValue) AND NOT ValueAlreadyListed(lcSeen, lcValue)
             lcResult = lcResult + IIF(EMPTY(lcResult), "", ", ") + lcValue
+            lcSeen = lcSeen + NormalizeToken(lcValue) + "|"
             lnCount = lnCount + 1
         ENDIF
 
@@ -255,11 +257,12 @@ ENDFUNC
 FUNCTION ExtractMethodNames
     LPARAMETERS tcContent, tnLimit
 
-    LOCAL lcNeedle, lnPos, lnSearchFrom, lcBlock, lcName, lcResult, lnCount
+    LOCAL lcNeedle, lnPos, lnSearchFrom, lcBlock, lcName, lcResult, lcSeen, lnCount
 
     lcNeedle = "### methods"
     lnSearchFrom = 1
     lcResult = ""
+    lcSeen = "|"
     lnCount = 0
 
     DO WHILE .T.
@@ -272,8 +275,9 @@ FUNCTION ExtractMethodNames
         lcBlock = ExtractCodeBlockAfter(tcContent, lnPos)
         lcName = ExtractProcedureName(lcBlock)
 
-        IF NOT EMPTY(lcName) AND NOT ValueAlreadyListed(lcResult, lcName)
+        IF NOT EMPTY(lcName) AND NOT ValueAlreadyListed(lcSeen, lcName)
             lcResult = lcResult + IIF(EMPTY(lcResult), "", ", ") + lcName
+            lcSeen = lcSeen + NormalizeToken(lcName) + "|"
             lnCount = lnCount + 1
         ENDIF
 
@@ -359,9 +363,21 @@ ENDFUNC
 
 
 FUNCTION ValueAlreadyListed
-    LPARAMETERS tcList, tcValue
+    LPARAMETERS tcSeen, tcValue
 
-    RETURN ("," + UPPER(tcList) + ",") $ ("," + UPPER(tcValue) + ",")
+    RETURN ("|" + NormalizeToken(tcValue) + "|") $ tcSeen
+ENDFUNC
+
+
+FUNCTION NormalizeToken
+    LPARAMETERS tcValue
+
+    LOCAL lcValue
+    lcValue = UPPER(ALLTRIM(TRANSFORM(tcValue)))
+    lcValue = STRTRAN(lcValue, "|", "/")
+    lcValue = STRTRAN(lcValue, CHR(13), " ")
+    lcValue = STRTRAN(lcValue, CHR(10), " ")
+    RETURN lcValue
 ENDFUNC
 
 
