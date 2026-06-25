@@ -152,6 +152,7 @@ PROCEDURE ExportDbfBasedFile
     LOCAL lcJsonFile, lcMdFile, lcTxtFile
     LOCAL lcAlias, lnFields, laFields[1], lnRecord
     LOCAL lcJson, lcMd, lcTxt
+    LOCAL llOpened
 
     lcRelPath = RelativePath(tcFile, tcSourceRoot)
     lcSafeName = SafeOutputName(lcRelPath)
@@ -164,14 +165,19 @@ PROCEDURE ExportDbfBasedFile
     ? "Exportando: " + lcRelPath
 
     lcAlias = "src_" + SYS(2015)
+    llOpened = .T.
 
     TRY
         USE (tcFile) ALIAS (lcAlias) IN 0 SHARED AGAIN
     CATCH TO loEx
+        llOpened = .F.
         DO LogError WITH "No se pudo abrir " + tcFile + ": " + loEx.Message
         STRTOFILE("ERROR abriendo archivo: " + tcFile + CRLF() + loEx.Message + CRLF(), lcTxtFile)
-        RETURN
     ENDTRY
+
+    IF NOT llOpened
+        RETURN
+    ENDIF
 
     SELECT (lcAlias)
     lnFields = AFIELDS(laFields)
@@ -267,6 +273,7 @@ PROCEDURE ExportTextFile
 
     LOCAL lcRelPath, lcSafeName, lcOutFile, lcMdFile, lcJsonFile
     LOCAL lcContent, lcKind
+    LOCAL llRead
 
     lcRelPath = RelativePath(tcFile, tcSourceRoot)
     lcSafeName = SafeOutputName(lcRelPath)
@@ -278,13 +285,19 @@ PROCEDURE ExportTextFile
 
     ? "Copiando texto: " + lcRelPath
 
+    llRead = .T.
+
     TRY
         lcContent = FILETOSTR(tcFile)
     CATCH TO loEx
+        llRead = .F.
         DO LogError WITH "No se pudo leer texto " + tcFile + ": " + loEx.Message
         STRTOFILE("ERROR leyendo archivo: " + tcFile + CRLF() + loEx.Message + CRLF(), lcOutFile)
-        RETURN
     ENDTRY
+
+    IF NOT llRead
+        RETURN
+    ENDIF
 
     STRTOFILE(lcContent, lcOutFile)
 
@@ -453,7 +466,7 @@ PROCEDURE LogError
     LPARAMETERS tcMessage
 
     IF TYPE("pcLogFile") == "C" AND NOT EMPTY(pcLogFile)
-        STRTOFILE(TTOC(DATETIME(), 1) + " - " + tcMessage + CRLF(), pcLogFile, 1)
+        STRTOFILE(DTOC(DATE()) + " " + TIME() + " - " + tcMessage + CRLF(), pcLogFile, 1)
     ENDIF
 ENDPROC
 
