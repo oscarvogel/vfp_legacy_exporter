@@ -4,7 +4,9 @@ Esta guia describe el aplicador `src/apply_scx_changes.prg`, pensado para prepar
 
 ## Regla principal
 
-No parchear `.SCX/.SCT` como texto bruto. El aplicador abre el `.SCX` como tabla Visual FoxPro, valida que exista su `.SCT` par y crea backup antes de modificar.
+No parchear `.SCX/.SCT` como texto bruto. El modo default es `sidecar-only`: el script no escribe en el campo `methods`, no reemplaza `Aceptar1.Click`, no modifica `properties` ni `reserved3`, y no guarda el `.SCX/.SCT`.
+
+Visual FoxPro Designer es quien debe guardar el cambio manualmente despues de pegar cada bloque.
 
 Ruta bloqueada explicitamente:
 
@@ -85,6 +87,15 @@ DO src\apply_scx_changes.prg WITH ;
    "PREPARE_INGRESO_COMPROBANTES"
 ```
 
+Backup opcional explicito:
+
+```foxpro
+DO src\apply_scx_changes.prg WITH ;
+   "X:\vfp_legacy_exporter\work\fasa_sandbox\forms\INGRESO COMPROBANTES.SCX", ;
+   "PREPARE_INGRESO_COMPROBANTES", ;
+   "BACKUP"
+```
+
 Usar solamente una copia sandbox. No usar la ruta productiva `X:\FASA\FORMS\INGRESO COMPROBANTES.SCX`.
 
 ## Que automatiza
@@ -92,62 +103,110 @@ Usar solamente una copia sandbox. No usar la ruta productiva `X:\FASA\FORMS\INGR
 - Verifica que el archivo indicado sea `.SCX`.
 - Verifica que exista el `.SCT` par.
 - Rechaza la ruta productiva conocida del formulario.
-- Crea backup de `.SCX` y `.SCT` en `_scx_backups\...`.
-- Abre el `.SCX` como tabla VFP con `USE ... SHARED`.
-- Trabaja sobre el registro `Formset`, no sobre un formulario aislado.
-- Agrega al bloque `properties`, sin duplicar:
-  - `nIdPrecarga = 0`
-  - `lDesdePrecarga = .F.`
-- Agrega al bloque `reserved3`, sin duplicar:
-  - `nidprecarga`
-  - `ldesdeprecarga`
-  - `*safec`
-  - `*safesqlc`
-  - `*safen`
-  - `*grabaprecarga`
-  - `*buscaprecargaproveedor`
-  - `*cargaprecarga`
-  - `*marcaprecargacargada`
-- Agrega al memo `methods`, sin duplicar:
-  - `SafeC`
-  - `SafeSQLC`
-  - `SafeN`
-  - `GrabaPrecarga`
-  - `BuscaPrecargaProveedor`
-  - `CargaPrecarga`
-  - `MarcaPrecargaCargada`
-- Reemplaza `Aceptar1.Click` solo si localiza de forma segura el registro con `objname = Aceptar1`, `parent = Formset.frmIngreso.Ajustador1` y `baseclass = commandbutton`.
-- Si no localiza `Aceptar1.Click`, no lo toca y deja el codigo final como archivo manual.
-- Genera al lado del formulario:
-  - `INGRESO COMPROBANTES_codex_methods_added.prg`
-  - `INGRESO COMPROBANTES_codex_aceptar1_click.prg`
-  - `INGRESO COMPROBANTES_codex_btnBuscaPrecarga_click.prg`
-  - `INGRESO COMPROBANTES_codex_apply_plan.md`
+- Si se pasa `"BACKUP"`, crea backup de `.SCX` y `.SCT` en `_scx_backups\...`.
+- Abre el `.SCX` como tabla VFP con `USE ... SHARED ... NOUPDATE`.
+- Localiza registros relevantes para informar el plan manual.
+- Genera archivos limpios `.txt` / `.prg` para pegar desde VFP Designer.
 
-## Que queda manual
+No automatiza cambios dentro del `.SCX/.SCT`.
 
-El aplicador no crea botones visuales ni modifica layout. Para este loop, agregar el boton desde el diseñador VFP es mas seguro que fabricar registros visuales en la tabla SCX.
+## Kit generado
 
-Despues de ejecutar el aplicador:
+- `INGRESO COMPROBANTES_codex_01_propiedades_formset.txt`
+- `INGRESO COMPROBANTES_codex_02_reserved3.txt`
+- `INGRESO COMPROBANTES_codex_03_metodos_formset.prg`
+- `INGRESO COMPROBANTES_codex_04_aceptar1_click.prg`
+- `INGRESO COMPROBANTES_codex_05_btnBuscaPrecarga_click.prg`
+- `INGRESO COMPROBANTES_codex_06_validatablas.txt`
+- `INGRESO COMPROBANTES_codex_PLAN_MANUAL.md`
+
+El archivo `01_propiedades_formset.txt` indica agregar manualmente al Formset:
+
+```text
+nIdPrecarga = 0
+lDesdePrecarga = .F.
+```
+
+El archivo `02_reserved3.txt` lista:
+
+```text
+nidprecarga
+ldesdeprecarga
+*safec
+*safesqlc
+*safen
+*grabaprecarga
+*buscaprecargaproveedor
+*cargaprecarga
+*marcaprecargacargada
+```
+
+El archivo `03_metodos_formset.prg` incluye:
+
+- `SafeC`
+- `SafeSQLC`
+- `SafeN`
+- `GrabaPrecarga`
+- `BuscaPrecargaProveedor`
+- `CargaPrecarga`
+- `MarcaPrecargaCargada`
+
+El archivo `04_aceptar1_click.prg` contiene el cuerpo final de `Aceptar1.Click` con menu:
+
+- Salir
+- Grabar ingreso a stock
+- Pre-cargar factura
+- Cancelar
+
+Ese bloque no abre `Forms\bajapedidos`, guarda `lcProveedorBaja` antes de los `Release`, y ejecuta `loForm.Release()` antes de `Thisformset.Release()`.
+
+El archivo `05_btnBuscaPrecarga_click.prg` contiene el click manual:
+
+```foxpro
+Local lnId
+
+lnId = Thisformset.BuscaPrecargaProveedor()
+If lnId > 0
+    Thisformset.CargaPrecarga(lnId)
+Endif
+
+Thisform.grdDet.SetFocus()
+```
+
+El archivo `06_validatablas.txt` contiene un bloque para pegar al final de `validatablas`, sin declarar `Local lsCad`, usando `goMy.Sql(m.lsCad)` para crear o migrar:
+
+- `codex_ingcomp_pre`
+- `codex_ingcomp_pre_det`
+
+## Aplicacion manual
+
+1. Abrir el formulario:
 
 ```foxpro
 MODIFY FORM "X:\vfp_legacy_exporter\work\fasa_sandbox\forms\INGRESO COMPROBANTES.SCX"
 ```
 
-Pasos manuales:
-
-1. Abrir la copia sandbox con `MODIFY FORM`.
-2. Confirmar que el formulario abre correctamente.
-3. Agregar el boton visual `btnBuscaPrecarga` desde el diseñador.
-4. Usar las propiedades sugeridas en `INGRESO COMPROBANTES_codex_apply_plan.md`.
-5. Pegar en el evento `Click` el contenido de `INGRESO COMPROBANTES_codex_btnBuscaPrecarga_click.prg`.
-6. Si `Aceptar1.Click` no fue reemplazado automaticamente, pegar manualmente el contenido de `INGRESO COMPROBANTES_codex_aceptar1_click.prg`.
-7. Guardar la copia sandbox.
-8. Ejecutar el flujo manual del formulario.
+2. Seleccionar el `Formset`.
+3. Agregar propiedades desde `INGRESO COMPROBANTES_codex_01_propiedades_formset.txt`:
+  - `nIdPrecarga = 0`
+  - `lDesdePrecarga = .F.`
+4. Agregar metodos del Formset pegando desde `INGRESO COMPROBANTES_codex_03_metodos_formset.prg`.
+5. Seleccionar `Aceptar1.Click`.
+6. Reemplazar el cuerpo con `INGRESO COMPROBANTES_codex_04_aceptar1_click.prg`.
+7. Agregar boton visual en `Ajustador1`:
+   - clase: `btnaccdirecto`
+   - classloc: `..\libs\botones.vcx`
+   - name: `btnBuscaPrecarga`
+   - caption: `Buscar pre-carga`
+   - ubicacion sugerida: junto a los botones de accion existentes.
+8. Pegar click desde `INGRESO COMPROBANTES_codex_05_btnBuscaPrecarga_click.prg`.
+9. Ubicar `validatablas` real y pegar al final el bloque `INGRESO COMPROBANTES_codex_06_validatablas.txt`.
+10. Guardar.
+11. Cerrar y reabrir el formulario para validar.
 
 ## Rollback
 
-Restaurar ambos archivos desde la carpeta de backup creada por el aplicador:
+Si se ejecuto con `"BACKUP"`, restaurar ambos archivos desde la carpeta de backup creada por el generador:
 
 ```text
 _scx_backups\<formulario>_<timestamp>\
@@ -160,18 +219,19 @@ Restaurar siempre el par completo `.SCX/.SCT`.
 - [ ] Preparar `X:\vfp_legacy_exporter\work\fasa_sandbox` con `forms`, `libs`, `include` y `graphics`.
 - [ ] Ejecutar solamente contra `X:\vfp_legacy_exporter\work\fasa_sandbox\forms\INGRESO COMPROBANTES.SCX`.
 - [ ] Confirmar que no se modifico `X:\FASA\FORMS\INGRESO COMPROBANTES.SCX`.
-- [ ] Confirmar que se creo backup de `.SCX` y `.SCT`.
-- [ ] Confirmar que el aplicador no duplica propiedades, `reserved3` ni metodos si se ejecuta dos veces.
-- [ ] Confirmar si `Aceptar1.Click` fue reemplazado automaticamente o quedo manual en el plan.
+- [ ] Confirmar que el generador no modifica `.SCX/.SCT`.
+- [ ] Confirmar que se creo backup de `.SCX` y `.SCT` solo si se pidio con `"BACKUP"`.
+- [ ] Confirmar que se generaron los siete archivos del kit manual.
 - [ ] Abrir la copia con `MODIFY FORM`.
-- [ ] Agregar boton manual y pegar el codigo `_click` generado.
+- [ ] Pegar propiedades, metodos, `Aceptar1.Click`, boton y `validatablas` desde los sidecars.
 - [ ] Guardar el formulario sandbox.
+- [ ] Cerrar y reabrir el formulario.
 - [ ] Ejecutar el flujo principal de ingreso de comprobantes.
 - [ ] Probar el caso de error esperado.
 - [ ] No pasar el PR a ready hasta completar la validacion manual sobre sandbox.
 
 ## Riesgos
 
-- Visual FoxPro puede rechazar formularios si se modifican registros visuales incompletos. Por eso este loop no agrega el boton automaticamente.
-- Los metodos agregados preparan el flujo de pre-carga, pero la validacion funcional sigue siendo manual porque depende de aliases/tablas disponibles en el sistema VFP.
+- Visual FoxPro puede rechazar formularios si se modifican registros visuales incompletos. Por eso este loop no modifica el `.SCX/.SCT` automaticamente.
+- Los metodos del kit preparan el flujo de pre-carga, pero la validacion funcional sigue siendo manual porque depende de aliases/tablas disponibles en el sistema VFP.
 - Si `MODIFY FORM` no abre la copia, detener el loop y restaurar backup antes de seguir.

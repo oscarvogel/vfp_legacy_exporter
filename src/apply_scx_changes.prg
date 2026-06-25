@@ -1,22 +1,27 @@
 * apply_scx_changes.prg
-* Aplicador seguro para preparar cambios sobre copias de formularios SCX/SCT.
+* Generador seguro de cambios manuales para copias de formularios SCX/SCT.
 *
 * Uso recomendado sobre sandbox:
 * DO src\apply_scx_changes.prg WITH ;
 *    "X:\vfp_legacy_exporter\work\fasa_sandbox\forms\INGRESO COMPROBANTES.SCX", ;
 *    "PREPARE_INGRESO_COMPROBANTES"
 *
-* Este script no parchea SCX/SCT como texto bruto. Abre el SCX como tabla VFP,
-* crea backup antes de cualquier modificacion y rechaza la ruta productiva
-* conocida del caso INGRESO COMPROBANTES.
+* Modo default: sidecar-only. No escribe en el campo `methods`, no reemplaza
+* Aceptar1.Click, no agrega metodos al Formset y no modifica `properties` ni
+* `reserved3`. Abre el SCX como tabla Visual FoxPro en NOUPDATE, localiza
+* registros relevantes y genera archivos auxiliares limpios para pegar desde
+* el diseñador de VFP.
 *
 * Sidecars generados:
-* - INGRESO COMPROBANTES_codex_methods_added.prg
-* - INGRESO COMPROBANTES_codex_aceptar1_click.prg
-* - INGRESO COMPROBANTES_codex_btnBuscaPrecarga_click.prg
-* - INGRESO COMPROBANTES_codex_apply_plan.md
+* - INGRESO COMPROBANTES_codex_01_propiedades_formset.txt
+* - INGRESO COMPROBANTES_codex_02_reserved3.txt
+* - INGRESO COMPROBANTES_codex_03_metodos_formset.prg
+* - INGRESO COMPROBANTES_codex_04_aceptar1_click.prg
+* - INGRESO COMPROBANTES_codex_05_btnBuscaPrecarga_click.prg
+* - INGRESO COMPROBANTES_codex_06_validatablas.txt
+* - INGRESO COMPROBANTES_codex_PLAN_MANUAL.md
 
-LPARAMETERS tcScxFile, tcMode
+LPARAMETERS tcScxFile, tcMode, tcBackupOption
 
 SET SAFETY OFF
 SET TALK OFF
@@ -59,27 +64,30 @@ IF NOT FILE(lcSctFile)
     RETURN .F.
 ENDIF
 
-LOCAL lcAlias, lcBackupDir, llResult
+LOCAL lcAlias, lcBackupDir, llResult, llCreateBackup
 lcAlias = "scx_" + SYS(2015)
-lcBackupDir = ""
+lcBackupDir = "No solicitado"
 llResult = .F.
+llCreateBackup = (UPPER(ALLTRIM(tcBackupOption)) == "BACKUP")
 
-DO BackupScxPair WITH tcScxFile, lcSctFile, lcBackupDir
-IF EMPTY(lcBackupDir)
-    ? "No se pudo crear backup. Se detiene sin modificar."
-    RETURN .F.
+IF llCreateBackup
+    DO BackupScxPair WITH tcScxFile, lcSctFile, lcBackupDir
+    IF EMPTY(lcBackupDir)
+        ? "No se pudo crear backup. Se detiene sin modificar."
+        RETURN .F.
+    ENDIF
 ENDIF
 
 TRY
-    USE (tcScxFile) ALIAS (lcAlias) IN 0 SHARED AGAIN
+    USE (tcScxFile) ALIAS (lcAlias) IN 0 SHARED AGAIN NOUPDATE
 CATCH TO loOpenError
-    ? "No se pudo abrir el SCX como tabla VFP: " + loOpenError.Message
+    ? "No se pudo abrir el SCX como tabla VFP en modo NOUPDATE: " + loOpenError.Message
     RETURN .F.
 ENDTRY
 
 DO CASE
 CASE tcMode == "PREPARE_INGRESO_COMPROBANTES"
-    llResult = ApplyIngresoComprobantesPreparation(lcAlias, tcScxFile, lcBackupDir)
+    llResult = GenerateIngresoComprobantesSidecars(lcAlias, tcScxFile, lcBackupDir)
 OTHERWISE
     ? "Modo no soportado: " + tcMode
     llResult = .F.
@@ -90,10 +98,10 @@ IF USED(lcAlias)
 ENDIF
 
 IF llResult
-    ? "Aplicador finalizado correctamente."
+    ? "Generador sidecar-only finalizado correctamente."
     ? "Backup: " + lcBackupDir
 ELSE
-    ? "Aplicador finalizado con errores. Revise mensajes anteriores."
+    ? "Generador finalizado con errores. Revise mensajes anteriores."
 ENDIF
 
 RETURN llResult
@@ -127,11 +135,11 @@ PROCEDURE BackupScxPair
 ENDPROC
 
 
-FUNCTION ApplyIngresoComprobantesPreparation
+FUNCTION GenerateIngresoComprobantesSidecars
     LPARAMETERS tcAlias, tcScxFile, tcBackupDir
 
     LOCAL lnFormsetRecord, lnAceptarRecord
-    LOCAL lcMethodsBlock, lcAceptarClick, lcBtnClick, lcAceptarStatus
+    LOCAL lcFormsetStatus, lcAceptarStatus
 
     IF UPPER(JUSTSTEM(tcScxFile)) <> "INGRESO COMPROBANTES"
         ? "El modo PREPARE_INGRESO_COMPROBANTES solo aplica al formulario INGRESO COMPROBANTES."
@@ -149,29 +157,11 @@ FUNCTION ApplyIngresoComprobantesPreparation
         lnFormsetRecord = FindScxRecord(tcAlias, "", "", "formset", "")
     ENDIF
 
-    IF lnFormsetRecord = 0
-        ? "No se encontro registro Formset en INGRESO COMPROBANTES."
-        RETURN .F.
+    IF lnFormsetRecord > 0
+        lcFormsetStatus = "Formset localizado en registro " + TRANSFORM(lnFormsetRecord) + "."
+    ELSE
+        lcFormsetStatus = "Formset no localizado automaticamente; revisar manualmente en VFP."
     ENDIF
-
-    IF NOT AppendPropertyIfMissing(tcAlias, lnFormsetRecord, "nIdPrecarga", "nIdPrecarga = 0")
-        RETURN .F.
-    ENDIF
-    IF NOT AppendPropertyIfMissing(tcAlias, lnFormsetRecord, "lDesdePrecarga", "lDesdePrecarga = .F.")
-        RETURN .F.
-    ENDIF
-
-    IF NOT AppendIngresoReserved3(tcAlias, lnFormsetRecord)
-        RETURN .F.
-    ENDIF
-
-    IF NOT AppendIngresoMethods(tcAlias, lnFormsetRecord)
-        RETURN .F.
-    ENDIF
-
-    lcMethodsBlock = BuildIngresoMethodsBlock()
-    lcAceptarClick = BuildAceptar1ClickBlock()
-    lcBtnClick = BuildBtnBuscaPrecargaClickBlock()
 
     lnAceptarRecord = FindScxRecord(tcAlias, ;
         "Aceptar1", ;
@@ -180,196 +170,96 @@ FUNCTION ApplyIngresoComprobantesPreparation
         "commandbutton")
 
     IF lnAceptarRecord > 0
-        IF NOT ReplaceMemoBlock(tcAlias, lnAceptarRecord, "methods", lcAceptarClick)
-            RETURN .F.
-        ENDIF
-        lcAceptarStatus = "Aceptar1.Click reemplazado automaticamente."
+        lcAceptarStatus = "Aceptar1 localizado en registro " + TRANSFORM(lnAceptarRecord) + "."
     ELSE
-        lcAceptarStatus = "Aceptar1.Click no localizado con seguridad; queda manual."
+        lcAceptarStatus = "Aceptar1 no localizado con seguridad; reemplazar Click manualmente si corresponde."
     ENDIF
 
     DO WriteIngresoComprobantesSidecars WITH ;
         tcScxFile, ;
         tcBackupDir, ;
-        lcMethodsBlock, ;
-        lcAceptarClick, ;
-        lcBtnClick, ;
+        lcFormsetStatus, ;
         lcAceptarStatus
 
-    ? "Preparacion aplicada para INGRESO COMPROBANTES."
-    ? "propiedades agregadas: nIdPrecarga, lDesdePrecarga"
-    ? "reserved3 actualizado: nidprecarga, ldesdeprecarga, *safec, *safesqlc, *safen, *grabaprecarga, *buscaprecargaproveedor, *cargaprecarga, *marcaprecargacargada"
-    ? "metodos agregados: SafeC, SafeSQLC, SafeN, GrabaPrecarga, BuscaPrecargaProveedor, CargaPrecarga, MarcaPrecargaCargada"
-    ? "Aceptar1.Click: " + lcAceptarStatus
-    ? "Boton visual: manual; usar btnBuscaPrecarga y el sidecar de Click generado."
-    ? "Backup creado: " + tcBackupDir
-    RETURN .T.
-ENDFUNC
-
-
-FUNCTION AppendIngresoReserved3
-    LPARAMETERS tcAlias, tnRecord
-
-    IF NOT AppendReserved3TokenIfMissing(tcAlias, tnRecord, "nidprecarga")
-        RETURN .F.
-    ENDIF
-    IF NOT AppendReserved3TokenIfMissing(tcAlias, tnRecord, "ldesdeprecarga")
-        RETURN .F.
-    ENDIF
-    IF NOT AppendReserved3TokenIfMissing(tcAlias, tnRecord, "*safec")
-        RETURN .F.
-    ENDIF
-    IF NOT AppendReserved3TokenIfMissing(tcAlias, tnRecord, "*safesqlc")
-        RETURN .F.
-    ENDIF
-    IF NOT AppendReserved3TokenIfMissing(tcAlias, tnRecord, "*safen")
-        RETURN .F.
-    ENDIF
-    IF NOT AppendReserved3TokenIfMissing(tcAlias, tnRecord, "*grabaprecarga")
-        RETURN .F.
-    ENDIF
-    IF NOT AppendReserved3TokenIfMissing(tcAlias, tnRecord, "*buscaprecargaproveedor")
-        RETURN .F.
-    ENDIF
-    IF NOT AppendReserved3TokenIfMissing(tcAlias, tnRecord, "*cargaprecarga")
-        RETURN .F.
-    ENDIF
-    IF NOT AppendReserved3TokenIfMissing(tcAlias, tnRecord, "*marcaprecargacargada")
-        RETURN .F.
-    ENDIF
+    ? "Modo: sidecar-only; no se modifica SCX/SCT."
+    ? "SCX abierto como tabla VFP con NOUPDATE."
+    ? lcFormsetStatus
+    ? lcAceptarStatus
+    ? "propiedades manuales: nIdPrecarga, lDesdePrecarga"
+    ? "reserved3 manual: nidprecarga, ldesdeprecarga, *safec, *safesqlc, *safen, *grabaprecarga, *buscaprecargaproveedor, *cargaprecarga, *marcaprecargacargada"
+    ? "metodos manuales: SafeC, SafeSQLC, SafeN, GrabaPrecarga, BuscaPrecargaProveedor, CargaPrecarga, MarcaPrecargaCargada"
+    ? "Aceptar1.Click manual: usar INGRESO COMPROBANTES_codex_04_aceptar1_click.prg"
+    ? "Boton visual manual: crear btnBuscaPrecarga y pegar el sidecar de Click."
+    ? "Backup: " + tcBackupDir
 
     RETURN .T.
 ENDFUNC
 
 
-FUNCTION AppendIngresoMethods
-    LPARAMETERS tcAlias, tnRecord
+PROCEDURE WriteIngresoComprobantesSidecars
+    LPARAMETERS tcScxFile, tcBackupDir, tcFormsetStatus, tcAceptarStatus
 
-    IF NOT AppendMemoBlockIfMissing(tcAlias, tnRecord, "methods", "PROCEDURE SafeC", BuildSafeCMethod())
-        RETURN .F.
-    ENDIF
-    IF NOT AppendMemoBlockIfMissing(tcAlias, tnRecord, "methods", "PROCEDURE SafeSQLC", BuildSafeSQLCMethod())
-        RETURN .F.
-    ENDIF
-    IF NOT AppendMemoBlockIfMissing(tcAlias, tnRecord, "methods", "PROCEDURE SafeN", BuildSafeNMethod())
-        RETURN .F.
-    ENDIF
-    IF NOT AppendMemoBlockIfMissing(tcAlias, tnRecord, "methods", "PROCEDURE GrabaPrecarga", BuildGrabaPrecargaMethod())
-        RETURN .F.
-    ENDIF
-    IF NOT AppendMemoBlockIfMissing(tcAlias, tnRecord, "methods", "PROCEDURE BuscaPrecargaProveedor", BuildBuscaPrecargaProveedorMethod())
-        RETURN .F.
-    ENDIF
-    IF NOT AppendMemoBlockIfMissing(tcAlias, tnRecord, "methods", "PROCEDURE CargaPrecarga", BuildCargaPrecargaMethod())
-        RETURN .F.
-    ENDIF
-    IF NOT AppendMemoBlockIfMissing(tcAlias, tnRecord, "methods", "PROCEDURE MarcaPrecargaCargada", BuildMarcaPrecargaCargadaMethod())
-        RETURN .F.
-    ENDIF
+    LOCAL lcBase, lcMethodsFile, lcAceptarFile, lcBtnFile
+    LOCAL lcPropertiesFile, lcReserved3File, lcValidatablasFile, lcPlanFile
+    LOCAL lcProperties, lcReserved3, lcMethods, lcAceptarClick, lcBtnClick
+    LOCAL lcValidatablas, lcPlan, lcBtnProps
 
-    RETURN .T.
-ENDFUNC
+    lcBase = ADDBS(JUSTPATH(tcScxFile)) + JUSTSTEM(tcScxFile)
+    lcPropertiesFile = lcBase + "_codex_01_propiedades_formset.txt"
+    lcReserved3File = lcBase + "_codex_02_reserved3.txt"
+    lcMethodsFile = lcBase + "_codex_03_metodos_formset.prg"
+    lcAceptarFile = lcBase + "_codex_04_aceptar1_click.prg"
+    lcBtnFile = lcBase + "_codex_05_btnBuscaPrecarga_click.prg"
+    lcValidatablasFile = lcBase + "_codex_06_validatablas.txt"
+    lcPlanFile = lcBase + "_codex_PLAN_MANUAL.md"
 
+    lcProperties = BuildPropertiesText()
+    lcReserved3 = BuildReserved3Text()
+    lcMethods = BuildIngresoMethodsBlock()
+    lcAceptarClick = BuildAceptar1ClickBlock()
+    lcBtnClick = BuildBtnBuscaPrecargaClickBlock()
+    lcValidatablas = BuildValidatablasBlock()
+    lcBtnProps = BuildBtnBuscaPrecargaPropertiesText()
 
-FUNCTION AppendPropertyIfMissing
-    LPARAMETERS tcAlias, tnRecord, tcPropertyName, tcPropertyLine
+    lcPlan = "# Plan manual INGRESO COMPROBANTES" + CRLF() + CRLF() + ;
+        "- Modo: `sidecar-only`." + CRLF() + ;
+        "- SCX: `" + tcScxFile + "`" + CRLF() + ;
+        "- Backup: `" + tcBackupDir + "`" + CRLF() + ;
+        "- " + tcFormsetStatus + CRLF() + ;
+        "- " + tcAceptarStatus + CRLF() + ;
+        "- El script no escribe en el campo `methods`, no reemplaza `Aceptar1.Click`, no modifica `properties` ni `reserved3`." + CRLF() + CRLF() + ;
+        "## Pasos manuales" + CRLF() + CRLF() + ;
+        "1. Abrir con `MODIFY FORM`." + CRLF() + ;
+        "2. Agregar propiedades al Formset pegando/recreando lo indicado en `" + JUSTFNAME(lcPropertiesFile) + "`." + CRLF() + ;
+        "3. Agregar metodos del Formset pegando desde `" + JUSTFNAME(lcMethodsFile) + "`." + CRLF() + ;
+        "4. Revisar `reserved3` y agregar manualmente lo indicado en `" + JUSTFNAME(lcReserved3File) + "` si el disenador lo requiere." + CRLF() + ;
+        "5. Seleccionar `Aceptar1.Click` y reemplazar manualmente el cuerpo pegando desde `" + JUSTFNAME(lcAceptarFile) + "`." + CRLF() + ;
+        "6. Agregar boton visual en `Ajustador1`." + CRLF() + ;
+        "7. Clase del boton: `btnaccdirecto`; classloc: `..\libs\botones.vcx`; name: `btnBuscaPrecarga`; caption: `Buscar pre-carga`." + CRLF() + ;
+        "8. Ubicacion sugerida: junto a los botones de accion existentes dentro de `Formset.frmIngreso.Ajustador1`." + CRLF() + ;
+        "9. Configurar el boton con estas propiedades sugeridas:" + CRLF() + CRLF() + ;
+        "```text" + CRLF() + lcBtnProps + CRLF() + "```" + CRLF() + CRLF() + ;
+        "10. Pegar `_click` desde `" + JUSTFNAME(lcBtnFile) + "`." + CRLF() + ;
+        "11. Ubicar el metodo `validatablas` real y pegar al final el bloque `" + JUSTFNAME(lcValidatablasFile) + "`." + CRLF() + ;
+        "12. Guardar." + CRLF() + ;
+        "13. Cerrar y reabrir el formulario para validar." + CRLF() + CRLF() + ;
+        "## Checklist de prueba" + CRLF() + CRLF() + ;
+        "- [ ] `MODIFY FORM` abre sin errores." + CRLF() + ;
+        "- [ ] Propiedades del Formset visibles y guardadas." + CRLF() + ;
+        "- [ ] Metodos del Formset compilan." + CRLF() + ;
+        "- [ ] `Aceptar1.Click` muestra las opciones Salir, Grabar ingreso a stock, Pre-cargar factura, Cancelar." + CRLF() + ;
+        "- [ ] Pre-cargar factura no abre `Forms\bajapedidos`." + CRLF() + ;
+        "- [ ] `btnBuscaPrecarga` carga una pre-carga y vuelve foco a `grdDet`." + CRLF() + ;
+        "- [ ] `validatablas` crea/migra `codex_ingcomp_pre` y `codex_ingcomp_pre_det`." + CRLF()
 
-    RETURN AppendLineIfMissing(tcAlias, tnRecord, "properties", tcPropertyName, tcPropertyLine)
-ENDFUNC
-
-
-FUNCTION AppendReserved3TokenIfMissing
-    LPARAMETERS tcAlias, tnRecord, tcToken
-
-    RETURN AppendLineIfMissing(tcAlias, tnRecord, "reserved3", tcToken, tcToken)
-ENDFUNC
-
-
-FUNCTION AppendLineIfMissing
-    LPARAMETERS tcAlias, tnRecord, tcFieldName, tcMarker, tcLine
-
-    LOCAL lcCurrent, lcNewValue
-
-    IF NOT HasField(tcAlias, tcFieldName)
-        ? "El SCX no tiene campo requerido: " + tcFieldName
-        RETURN .F.
-    ENDIF
-
-    SELECT (tcAlias)
-    GO tnRecord
-
-    lcCurrent = GetFieldText(tcAlias, tcFieldName)
-    IF ATC(tcMarker, lcCurrent) > 0
-        ? "Entrada ya existente, no se duplica: " + tcMarker
-        RETURN .T.
-    ENDIF
-
-    lcNewValue = lcCurrent
-    IF NOT EMPTY(lcNewValue)
-        lcNewValue = lcNewValue + CRLF()
-    ENDIF
-    lcNewValue = lcNewValue + tcLine
-
-    RETURN ReplaceMemoBlock(tcAlias, tnRecord, tcFieldName, lcNewValue)
-ENDFUNC
-
-
-FUNCTION AppendMemoBlockIfMissing
-    LPARAMETERS tcAlias, tnRecord, tcFieldName, tcMarker, tcBlock
-
-    LOCAL lcCurrent, lcNewValue
-
-    IF NOT HasField(tcAlias, tcFieldName)
-        ? "El SCX no tiene campo requerido: " + tcFieldName
-        RETURN .F.
-    ENDIF
-
-    SELECT (tcAlias)
-    GO tnRecord
-
-    lcCurrent = GetFieldText(tcAlias, tcFieldName)
-    IF ATC(tcMarker, lcCurrent) > 0
-        ? "Bloque ya existente, no se duplica: " + tcMarker
-        RETURN .T.
-    ENDIF
-
-    lcNewValue = lcCurrent
-    IF NOT EMPTY(lcNewValue)
-        lcNewValue = lcNewValue + CRLF()
-    ENDIF
-    lcNewValue = lcNewValue + tcBlock
-
-    RETURN ReplaceMemoBlock(tcAlias, tnRecord, tcFieldName, lcNewValue)
-ENDFUNC
-
-
-FUNCTION ReplaceMemoBlock
-    LPARAMETERS tcAlias, tnRecord, tcFieldName, tcNewValue
-
-    IF NOT HasField(tcAlias, tcFieldName)
-        ? "El SCX no tiene campo requerido: " + tcFieldName
-        RETURN .F.
-    ENDIF
-
-    SELECT (tcAlias)
-    GO tnRecord
-
-    IF NOT RLOCK()
-        ? "No se pudo bloquear el registro " + TRANSFORM(tnRecord)
-        RETURN .F.
-    ENDIF
-
-    TRY
-        REPLACE (tcFieldName) WITH tcNewValue IN (tcAlias)
-    CATCH TO loReplaceError
-        UNLOCK IN (tcAlias)
-        ? "No se pudo actualizar " + tcFieldName + ": " + loReplaceError.Message
-        RETURN .F.
-    ENDTRY
-
-    UNLOCK IN (tcAlias)
-    RETURN .T.
-ENDFUNC
+    STRTOFILE(lcMethods, lcMethodsFile)
+    STRTOFILE(lcAceptarClick, lcAceptarFile)
+    STRTOFILE(lcBtnClick, lcBtnFile)
+    STRTOFILE(lcProperties, lcPropertiesFile)
+    STRTOFILE(lcReserved3, lcReserved3File)
+    STRTOFILE(lcValidatablas, lcValidatablasFile)
+    STRTOFILE(lcPlan, lcPlanFile)
+ENDPROC
 
 
 FUNCTION FindScxRecord
@@ -453,44 +343,35 @@ FUNCTION GetFieldText
 ENDFUNC
 
 
-PROCEDURE WriteIngresoComprobantesSidecars
-    LPARAMETERS tcScxFile, tcBackupDir, tcMethodsBlock, tcAceptarClick, tcBtnClick, tcAceptarStatus
+FUNCTION BuildPropertiesText
+    RETURN "* Agregar estas propiedades al Formset desde Visual FoxPro Designer." + CRLF() + ;
+        "nIdPrecarga = 0" + CRLF() + ;
+        "lDesdePrecarga = .F." + CRLF()
+ENDFUNC
 
-    LOCAL lcBase, lcMethodsFile, lcAceptarFile, lcBtnFile, lcPlanFile
-    LOCAL lcPlan, lcBtnProps
 
-    lcBase = ADDBS(JUSTPATH(tcScxFile)) + JUSTSTEM(tcScxFile)
-    lcMethodsFile = lcBase + "_codex_methods_added.prg"
-    lcAceptarFile = lcBase + "_codex_aceptar1_click.prg"
-    lcBtnFile = lcBase + "_codex_btnBuscaPrecarga_click.prg"
-    lcPlanFile = lcBase + "_codex_apply_plan.md"
+FUNCTION BuildReserved3Text
+    RETURN "nidprecarga" + CRLF() + ;
+        "ldesdeprecarga" + CRLF() + ;
+        "*safec" + CRLF() + ;
+        "*safesqlc" + CRLF() + ;
+        "*safen" + CRLF() + ;
+        "*grabaprecarga" + CRLF() + ;
+        "*buscaprecargaproveedor" + CRLF() + ;
+        "*cargaprecarga" + CRLF() + ;
+        "*marcaprecargacargada" + CRLF()
+ENDFUNC
 
-    lcBtnProps = ;
+
+FUNCTION BuildBtnBuscaPrecargaPropertiesText
+    RETURN "Class = btnaccdirecto" + CRLF() + ;
+        "ClassLoc = ..\libs\botones.vcx" + CRLF() + ;
         "Name = btnBuscaPrecarga" + CRLF() + ;
-        "Caption = Pre-carga" + CRLF() + ;
+        "Caption = Buscar pre-carga" + CRLF() + ;
         "Enabled = .T." + CRLF() + ;
         "Visible = .T." + CRLF() + ;
         "TabStop = .T."
-
-    lcPlan = "# Plan manual INGRESO COMPROBANTES" + CRLF() + CRLF() + ;
-        "- SCX: `" + tcScxFile + "`" + CRLF() + ;
-        "- Backup: `" + tcBackupDir + "`" + CRLF() + ;
-        "- Propiedades agregadas al Formset: `nIdPrecarga = 0`, `lDesdePrecarga = .F.`" + CRLF() + ;
-        "- `reserved3` actualizado con propiedades y metodos protegidos de pre-carga." + CRLF() + ;
-        "- Metodos agregados al Formset: `SafeC`, `SafeSQLC`, `SafeN`, `GrabaPrecarga`, `BuscaPrecargaProveedor`, `CargaPrecarga`, `MarcaPrecargaCargada`." + CRLF() + ;
-        "- Aceptar1.Click: " + tcAceptarStatus + CRLF() + ;
-        "- Boton visual automatico: no aplicado; agregar manualmente `btnBuscaPrecarga`." + CRLF() + ;
-        "- Propiedades sugeridas del boton:" + CRLF() + CRLF() + ;
-        "```text" + CRLF() + lcBtnProps + CRLF() + "```" + CRLF() + CRLF() + ;
-        "- Codigo manual del boton: `" + JUSTFNAME(lcBtnFile) + "`" + CRLF() + ;
-        "- Codigo final de Aceptar1.Click: `" + JUSTFNAME(lcAceptarFile) + "`" + CRLF() + ;
-        "- Metodos agregados: `" + JUSTFNAME(lcMethodsFile) + "`" + CRLF()
-
-    STRTOFILE(tcMethodsBlock, lcMethodsFile)
-    STRTOFILE(tcAceptarClick, lcAceptarFile)
-    STRTOFILE("* Propiedades sugeridas para btnBuscaPrecarga" + CRLF() + lcBtnProps + CRLF() + CRLF() + tcBtnClick, lcBtnFile)
-    STRTOFILE(lcPlan, lcPlanFile)
-ENDPROC
+ENDFUNC
 
 
 FUNCTION BuildIngresoMethodsBlock
@@ -702,16 +583,45 @@ FUNCTION BuildAceptar1ClickBlock
 
 TEXT TO lcCode NOSHOW
 PROCEDURE Click
-    LOCAL llOk
-    llOk = .T.
+    LOCAL lnOpcion, lcProveedorBaja, loForm
+    lnOpcion = 0
+    lcProveedorBaja = ""
+    loForm = THISFORM
 
-    IF PEMSTATUS(THISFORMSET, "GrabaPrecarga", 5)
-        llOk = THISFORMSET.GrabaPrecarga()
-    ENDIF
+    DEFINE POPUP codex_ingcomp_menu SHORTCUT RELATIVE FROM MROW(), MCOL()
+    DEFINE BAR 1 OF codex_ingcomp_menu PROMPT "Salir"
+    DEFINE BAR 2 OF codex_ingcomp_menu PROMPT "Grabar ingreso a stock"
+    DEFINE BAR 3 OF codex_ingcomp_menu PROMPT "Pre-cargar factura"
+    DEFINE BAR 4 OF codex_ingcomp_menu PROMPT "Cancelar"
+    ON SELECTION BAR 1 OF codex_ingcomp_menu lnOpcion = 1
+    ON SELECTION BAR 2 OF codex_ingcomp_menu lnOpcion = 2
+    ON SELECTION BAR 3 OF codex_ingcomp_menu lnOpcion = 3
+    ON SELECTION BAR 4 OF codex_ingcomp_menu lnOpcion = 4
+    ACTIVATE POPUP codex_ingcomp_menu
+    RELEASE POPUP codex_ingcomp_menu
 
-    IF llOk
+    DO CASE
+    CASE lnOpcion = 1
+        IF TYPE("THISFORMSET.frmIngreso.txtProveedor.Value") <> "U"
+            lcProveedorBaja = THISFORMSET.SafeC(THISFORMSET.frmIngreso.txtProveedor.Value)
+        ENDIF
+        IF VARTYPE(loForm) = "O" AND NOT ISNULL(loForm)
+            loForm.Release()
+        ENDIF
+        THISFORMSET.Release()
+
+    CASE lnOpcion = 2
         DODEFAULT()
-    ENDIF
+
+    CASE lnOpcion = 3
+        * Pre-cargar factura: no abrir Forms\bajapedidos.
+        IF PEMSTATUS(THISFORMSET, "GrabaPrecarga", 5)
+            THISFORMSET.GrabaPrecarga()
+        ENDIF
+
+    CASE lnOpcion = 4 OR lnOpcion = 0
+        RETURN .F.
+    ENDCASE
 ENDPROC
 ENDTEXT
 
@@ -724,17 +634,57 @@ FUNCTION BuildBtnBuscaPrecargaClickBlock
 
 TEXT TO lcCode NOSHOW
 PROCEDURE Click
-    LOCAL lnIdPrecarga
-    lnIdPrecarga = 0
+    Local lnId
 
-    IF PEMSTATUS(THISFORMSET, "BuscaPrecargaProveedor", 5)
-        lnIdPrecarga = THISFORMSET.BuscaPrecargaProveedor()
-    ENDIF
+    lnId = Thisformset.BuscaPrecargaProveedor()
+    If lnId > 0
+        Thisformset.CargaPrecarga(lnId)
+    Endif
 
-    IF lnIdPrecarga > 0 AND PEMSTATUS(THISFORMSET, "CargaPrecarga", 5)
-        THISFORMSET.CargaPrecarga(lnIdPrecarga)
-    ENDIF
+    Thisform.grdDet.SetFocus()
 ENDPROC
+ENDTEXT
+
+    RETURN lcCode
+ENDFUNC
+
+
+FUNCTION BuildValidatablasBlock
+    LOCAL lcCode
+
+TEXT TO lcCode NOSHOW
+* Codex issue 10 - pegar al final de validatablas.
+* No agregar una declaracion local nueva para lsCad si el metodo ya la declara.
+
+lsCad = "CREATE TABLE IF NOT EXISTS codex_ingcomp_pre (" + ;
+    "idprecarga INT NOT NULL AUTO_INCREMENT PRIMARY KEY, " + ;
+    "proveedor VARCHAR(120) NOT NULL DEFAULT '', " + ;
+    "fecha DATE NULL, " + ;
+    "nrocomprobante VARCHAR(60) NOT NULL DEFAULT '', " + ;
+    "cargada TINYINT(1) NOT NULL DEFAULT 0, " + ;
+    "created_at DATETIME NULL)"
+goMy.Sql(m.lsCad)
+
+lsCad = "CREATE TABLE IF NOT EXISTS codex_ingcomp_pre_det (" + ;
+    "idprecargadet INT NOT NULL AUTO_INCREMENT PRIMARY KEY, " + ;
+    "idprecarga INT NOT NULL, " + ;
+    "codigo VARCHAR(60) NOT NULL DEFAULT '', " + ;
+    "descripcion VARCHAR(180) NOT NULL DEFAULT '', " + ;
+    "cantidad DECIMAL(14,4) NOT NULL DEFAULT 0, " + ;
+    "precio DECIMAL(14,4) NOT NULL DEFAULT 0)"
+goMy.Sql(m.lsCad)
+
+lsCad = "ALTER TABLE codex_ingcomp_pre ADD COLUMN IF NOT EXISTS observaciones TEXT NULL"
+goMy.Sql(m.lsCad)
+
+lsCad = "ALTER TABLE codex_ingcomp_pre ADD COLUMN IF NOT EXISTS cargada TINYINT(1) NOT NULL DEFAULT 0"
+goMy.Sql(m.lsCad)
+
+lsCad = "ALTER TABLE codex_ingcomp_pre_det ADD COLUMN IF NOT EXISTS bonificacion DECIMAL(14,4) NOT NULL DEFAULT 0"
+goMy.Sql(m.lsCad)
+
+lsCad = "ALTER TABLE codex_ingcomp_pre_det ADD INDEX IF NOT EXISTS idx_codex_ingcomp_pre_det_pre (idprecarga)"
+goMy.Sql(m.lsCad)
 ENDTEXT
 
     RETURN lcCode
