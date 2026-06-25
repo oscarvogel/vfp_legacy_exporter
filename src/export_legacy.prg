@@ -151,7 +151,6 @@ PROCEDURE ExportDbfBasedFile
     LOCAL lcRelPath, lcSafeName, lcKind
     LOCAL lcJsonFile, lcMdFile, lcTxtFile
     LOCAL lcAlias, lnFields, laFields[1], lnRecord
-    LOCAL lcJson, lcMd, lcTxt
     LOCAL llOpened
 
     lcRelPath = RelativePath(tcFile, tcSourceRoot)
@@ -182,20 +181,20 @@ PROCEDURE ExportDbfBasedFile
     SELECT (lcAlias)
     lnFields = AFIELDS(laFields)
 
-    lcJson = "{" + CRLF()
-    lcJson = lcJson + '  "file": ' + JsonValue(lcRelPath) + "," + CRLF()
-    lcJson = lcJson + '  "kind": ' + JsonValue(lcKind) + "," + CRLF()
-    lcJson = lcJson + '  "records": [' + CRLF()
+    STRTOFILE("{" + CRLF(), lcJsonFile)
+    STRTOFILE('  "file": ' + JsonValue(lcRelPath) + "," + CRLF(), lcJsonFile, 1)
+    STRTOFILE('  "kind": ' + JsonValue(lcKind) + "," + CRLF(), lcJsonFile, 1)
+    STRTOFILE('  "records": [' + CRLF(), lcJsonFile, 1)
 
-    lcMd = "# " + lcRelPath + CRLF() + CRLF()
-    lcMd = lcMd + "- Tipo: `" + lcKind + "`" + CRLF()
-    lcMd = lcMd + "- Archivo original: `" + tcFile + "`" + CRLF()
-    lcMd = lcMd + "- Registros: `" + TRANSFORM(RECCOUNT()) + "`" + CRLF() + CRLF()
+    STRTOFILE("# " + lcRelPath + CRLF() + CRLF(), lcMdFile)
+    STRTOFILE("- Tipo: `" + lcKind + "`" + CRLF(), lcMdFile, 1)
+    STRTOFILE("- Archivo original: `" + tcFile + "`" + CRLF(), lcMdFile, 1)
+    STRTOFILE("- Registros: `" + TRANSFORM(RECCOUNT()) + "`" + CRLF() + CRLF(), lcMdFile, 1)
 
-    lcTxt = "FILE: " + lcRelPath + CRLF()
-    lcTxt = lcTxt + "KIND: " + lcKind + CRLF()
-    lcTxt = lcTxt + "RECORDS: " + TRANSFORM(RECCOUNT()) + CRLF()
-    lcTxt = lcTxt + REPLICATE("=", 100) + CRLF()
+    STRTOFILE("FILE: " + lcRelPath + CRLF(), lcTxtFile)
+    STRTOFILE("KIND: " + lcKind + CRLF(), lcTxtFile, 1)
+    STRTOFILE("RECORDS: " + TRANSFORM(RECCOUNT()) + CRLF(), lcTxtFile, 1)
+    STRTOFILE(REPLICATE("=", 100) + CRLF(), lcTxtFile, 1)
 
     lnRecord = 0
 
@@ -203,34 +202,30 @@ PROCEDURE ExportDbfBasedFile
         lnRecord = lnRecord + 1
 
         IF lnRecord > 1
-            lcJson = lcJson + "," + CRLF()
+            STRTOFILE("," + CRLF(), lcJsonFile, 1)
         ENDIF
 
-        lcJson = lcJson + "    {" + CRLF()
-        lcJson = lcJson + '      "_recno": ' + TRANSFORM(RECNO())
+        STRTOFILE("    {" + CRLF(), lcJsonFile, 1)
+        STRTOFILE('      "_recno": ' + TRANSFORM(RECNO()), lcJsonFile, 1)
 
-        lcMd = lcMd + "## Registro " + TRANSFORM(RECNO()) + CRLF() + CRLF()
-        lcTxt = lcTxt + "REGISTRO: " + TRANSFORM(RECNO()) + CRLF()
+        STRTOFILE("## Registro " + TRANSFORM(RECNO()) + CRLF() + CRLF(), lcMdFile, 1)
+        STRTOFILE("REGISTRO: " + TRANSFORM(RECNO()) + CRLF(), lcTxtFile, 1)
 
-        DO ExportCurrentRecordFields WITH lcAlias, laFields, lnFields, lcJson, lcMd, lcTxt
+        DO ExportCurrentRecordFields WITH lcAlias, laFields, lnFields, lcJsonFile, lcMdFile, lcTxtFile
 
-        lcJson = lcJson + CRLF() + "    }"
-        lcMd = lcMd + CRLF() + "---" + CRLF() + CRLF()
-        lcTxt = lcTxt + REPLICATE("-", 100) + CRLF()
+        STRTOFILE(CRLF() + "    }", lcJsonFile, 1)
+        STRTOFILE(CRLF() + "---" + CRLF() + CRLF(), lcMdFile, 1)
+        STRTOFILE(REPLICATE("-", 100) + CRLF(), lcTxtFile, 1)
     ENDSCAN
 
-    lcJson = lcJson + CRLF() + "  ]" + CRLF() + "}" + CRLF()
+    STRTOFILE(CRLF() + "  ]" + CRLF() + "}" + CRLF(), lcJsonFile, 1)
 
     USE IN (lcAlias)
-
-    STRTOFILE(lcJson, lcJsonFile)
-    STRTOFILE(lcMd, lcMdFile)
-    STRTOFILE(lcTxt, lcTxtFile)
 ENDPROC
 
 
 PROCEDURE ExportCurrentRecordFields
-    LPARAMETERS tcAlias, taFields, tnFields, tcJson, tcMd, tcTxt
+    LPARAMETERS tcAlias, taFields, tnFields, tcJsonFile, tcMdFile, tcTxtFile
 
     LOCAL i, lcField, luValue, lcType, lcTextValue
 
@@ -252,18 +247,20 @@ PROCEDURE ExportCurrentRecordFields
             lcTextValue = "[UNREADABLE FIELD: " + loEx.Message + "]"
         ENDTRY
 
-        tcJson = tcJson + "," + CRLF()
-        tcJson = tcJson + "      " + JsonValue(lcField) + ": " + JsonValue(lcTextValue)
+        lcTextValue = LimitFieldText(lcTextValue)
+
+        STRTOFILE("," + CRLF(), tcJsonFile, 1)
+        STRTOFILE("      " + JsonValue(lcField) + ": " + JsonValue(lcTextValue), tcJsonFile, 1)
 
         IF NOT EMPTY(ALLTRIM(lcTextValue))
-            tcMd = tcMd + "### " + lcField + CRLF() + CRLF()
-            tcMd = tcMd + "```text" + CRLF()
-            tcMd = tcMd + lcTextValue + CRLF()
-            tcMd = tcMd + "```" + CRLF() + CRLF()
+            STRTOFILE("### " + lcField + CRLF() + CRLF(), tcMdFile, 1)
+            STRTOFILE("```text" + CRLF(), tcMdFile, 1)
+            STRTOFILE(lcTextValue + CRLF(), tcMdFile, 1)
+            STRTOFILE("```" + CRLF() + CRLF(), tcMdFile, 1)
         ENDIF
 
-        tcTxt = tcTxt + UPPER(lcField) + ":" + CRLF()
-        tcTxt = tcTxt + lcTextValue + CRLF() + CRLF()
+        STRTOFILE(UPPER(lcField) + ":" + CRLF(), tcTxtFile, 1)
+        STRTOFILE(lcTextValue + CRLF() + CRLF(), tcTxtFile, 1)
     ENDFOR
 ENDPROC
 
@@ -429,6 +426,31 @@ FUNCTION ValueToText
     OTHERWISE
         RETURN TRANSFORM(tuValue)
     ENDCASE
+ENDFUNC
+
+
+FUNCTION MaxFieldExportChars
+    RETURN 250000
+ENDFUNC
+
+
+FUNCTION LimitFieldText
+    LPARAMETERS tcText
+
+    LOCAL lcText, lnMaxChars
+
+    IF ISNULL(tcText)
+        RETURN ""
+    ENDIF
+
+    lcText = TRANSFORM(tcText)
+    lnMaxChars = MaxFieldExportChars()
+
+    IF LEN(lcText) > lnMaxChars
+        RETURN LEFT(lcText, lnMaxChars) + CRLF() + "[TRUNCATED: field too large]"
+    ENDIF
+
+    RETURN lcText
 ENDFUNC
 
 

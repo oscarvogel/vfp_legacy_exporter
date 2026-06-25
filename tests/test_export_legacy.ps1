@@ -57,6 +57,22 @@ function Get-CatchBlocks {
 
 $catchBlocks = Get-CatchBlocks -Lines $lines
 
+function Get-ProcedureText {
+    param(
+        [string]$Content,
+        [string]$Name
+    )
+
+    $pattern = "(?is)PROCEDURE\s+$Name\b(?<Body>.*?)(?=\r?\n(?:PROCEDURE|FUNCTION)\s+|\z)"
+    $match = [regex]::Match($Content, $pattern)
+
+    if (-not $match.Success) {
+        throw "Missing procedure $Name"
+    }
+
+    return $match.Value
+}
+
 if ($catchBlocks.Count -lt 1) {
     throw "Expected at least one CATCH block in export_legacy.prg"
 }
@@ -84,6 +100,58 @@ if ($content -notmatch 'llOpened\s*=\s*\.F\.') {
 
 if ($content -notmatch 'llRead\s*=\s*\.F\.') {
     throw "Expected ExportTextFile to use llRead failure flag"
+}
+
+$dbfExport = Get-ProcedureText -Content $content -Name "ExportDbfBasedFile"
+$fieldExport = Get-ProcedureText -Content $content -Name "ExportCurrentRecordFields"
+$omitFunction = [regex]::Match($content, '(?is)FUNCTION\s+FieldShouldOmitContent\b.*?(?=\r?\n(?:PROCEDURE|FUNCTION)\s+|\z)').Value
+
+if ($dbfExport -notmatch 'STRTOFILE\s*\(.+lcJsonFile\s*,\s*1\s*\)') {
+    throw "Expected ExportDbfBasedFile to append JSON output incrementally"
+}
+
+if ($dbfExport -notmatch 'STRTOFILE\s*\(.+lcMdFile\s*,\s*1\s*\)') {
+    throw "Expected ExportDbfBasedFile to append Markdown output incrementally"
+}
+
+if ($dbfExport -notmatch 'STRTOFILE\s*\(.+lcTxtFile\s*,\s*1\s*\)') {
+    throw "Expected ExportDbfBasedFile to append TXT output incrementally"
+}
+
+if ($dbfExport -match '(?m)^\s*lc(Json|Md|Txt)\s*=\s*lc\1\s*\+') {
+    throw "ExportDbfBasedFile must not append whole output into lcJson/lcMd/lcTxt accumulators"
+}
+
+if ($fieldExport -notmatch 'LPARAMETERS\s+tcAlias\s*,\s*taFields\s*,\s*tnFields\s*,\s*tcJsonFile\s*,\s*tcMdFile\s*,\s*tcTxtFile') {
+    throw "Expected ExportCurrentRecordFields to receive output file paths"
+}
+
+if ($fieldExport -notmatch 'STRTOFILE\s*\(.+tcJsonFile\s*,\s*1\s*\)') {
+    throw "Expected ExportCurrentRecordFields to append JSON fields incrementally"
+}
+
+if ($fieldExport -notmatch 'STRTOFILE\s*\(.+tcMdFile\s*,\s*1\s*\)') {
+    throw "Expected ExportCurrentRecordFields to append Markdown fields incrementally"
+}
+
+if ($fieldExport -notmatch 'STRTOFILE\s*\(.+tcTxtFile\s*,\s*1\s*\)') {
+    throw "Expected ExportCurrentRecordFields to append TXT fields incrementally"
+}
+
+if ($content -notmatch 'FUNCTION\s+MaxFieldExportChars\b') {
+    throw "Expected MaxFieldExportChars to cap very large memo exports"
+}
+
+if ($content -notmatch 'FUNCTION\s+LimitFieldText\b') {
+    throw "Expected LimitFieldText to truncate oversized field text before JSON/MD/TXT output"
+}
+
+if ($fieldExport -notmatch 'LimitFieldText\s*\(') {
+    throw "Expected ExportCurrentRecordFields to apply LimitFieldText before writing fields"
+}
+
+if ($omitFunction -match '(?i)"methods"|"properties"') {
+    throw "FieldShouldOmitContent must not omit methods or properties"
 }
 
 Write-Host "export_legacy compatibility checks passed."
